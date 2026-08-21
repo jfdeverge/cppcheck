@@ -6480,6 +6480,19 @@ private:
                       "[test.cpp:4:13]: (style) Comparing expression of type 'const unsigned int &' against value 4294967295. Condition is always false. [compareValueOutOfTypeRangeError]\n",
                       errout_str());
 
+        check("typedef unsigned int uint32;\n"
+              "typedef unsigned long long uint64;\n"
+              "typedef long long sint64;\n"
+              "void f(uint32 x) {\n"
+              "    uint64 tmp = ((uint64)x) + 1ULL;\n"
+              "    if (tmp > 4294967295ULL)\n"
+              "        tmp = 4294967295ULL;\n"
+              "    if ((((sint64)((uint32)tmp)) - 1LL) < 0LL) {}\n"
+              "    if ((((sint64)((uint32)tmp)) - 1LL) > 4294967295LL) {}\n"
+              "}\n", settingsUnix64);
+      ASSERT_EQUALS("[test.cpp:9:43]: (style) Comparing expression of type 'signed long long' against value 4294967295. Condition is always false. [compareValueOutOfTypeRangeError]\n",
+                      errout_str());
+
         check("void f() {\n"
               "    long long ll = 1024 * 1024 * 1024;\n"
               "    if (ll * 8 < INT_MAX) {}\n"
