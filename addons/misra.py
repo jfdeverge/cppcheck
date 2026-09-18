@@ -3512,9 +3512,26 @@ class MisraChecker:
             if w['message'].endswith('[-Wimplicit-function-declaration]'):
                 self.reportError(cppcheckdata.Location(w), 17, 3)
 
+        # False-positive protection: when headers provide multiple
+        # #if-duplicated typedef variants of the same type (common in
+        # generated ADAS/RTE type headers), cppcheck analyses one
+        # configuration per variant.  In some configurations the symbol
+        # database fails to link the function tokens (prototype, definition
+        # and call all get function=None) although the very same token
+        # positions are properly function-linked in other configurations of
+        # the same translation unit.  Such tokens are definitely declared,
+        # so they are not implicit function declarations and must not be
+        # reported.
+        linked_positions = self._17_3_linked_positions
+        for token in cfg.tokenlist:
+            if token.function is not None:
+                linked_positions.add((token.file, token.linenr, token.column))
+
         # Additional check for implicit function calls in expressions
         for token in cfg.tokenlist:
             if token.isName and token.scope.type != 'Global' and token.function is None and token.valueType is None:
+                if (token.file, token.linenr, token.column) in linked_positions:
+                    continue
                 if token.next and token.next.str == "(" and token.next.valueType is None and \
                         isFunctionCall(token.next, cfg.standards.c):
                     if token.next.next.str == "*" and \
@@ -4722,6 +4739,11 @@ class MisraChecker:
             self.printStatus('Checking ' + dumpfile + '...')
 
         self.is_cpp = data.language == 'cpp'
+
+        # Rule 17.3 false-positive protection cache: (file, line, column)
+        # positions that the symbol database function-linked in at least one
+        # configuration of the current translation unit.  Reset per TU.
+        self._17_3_linked_positions = set()
 
         for cfgNumber, cfg in enumerate(data.iterconfigurations()):
             if not self.settings.quiet:
