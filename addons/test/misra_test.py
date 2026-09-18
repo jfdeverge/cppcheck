@@ -12,6 +12,7 @@ from addons.misra import C11_STDLIB_IDENTIFIERS, C99_STDLIB_IDENTIFIERS,C90_STDL
 
 TEST_SOURCE_FILES = [os.path.join('addons','test','misra','misra-test.c')]
 REGRESSION_SOURCE_FILE = os.path.join('addons', 'test', 'misra', 'misra-regression-prototypes.c')
+REGRESSION_17_3_SOURCE_FILE = os.path.join('addons', 'test', 'misra', 'misra-regression-17-3-enumconfigs.c')
 
 
 def remove_misra_config(s:str):
@@ -107,6 +108,34 @@ def test_function_prototype_and_pointer_call_regressions(checker, capsys):
     finally:
         sys.argv.remove("--cli")
         dump_remove(REGRESSION_SOURCE_FILE)
+
+
+def test_17_3_enum_typedef_config_false_positive(checker, capsys):
+    """#if-duplicated typedefs must not cause 17.3 false positives.
+
+    With the enum-typedef configuration active, the symbol database
+    may lose the function link of the adapter's prototype/definition/
+    call tokens although another configuration links them.  The
+    genuinely undeclared call must still be reported.
+    """
+    dump_create(REGRESSION_17_3_SOURCE_FILE)
+    sys.argv.append("--cli")
+    try:
+        checker.loadRuleTexts("./addons/test/misra/misra_rules_dummy.txt")
+        checker.parseDump(REGRESSION_17_3_SOURCE_FILE + ".dump")
+        captured = capsys.readouterr().out
+        json_output = convert_json_output(captured.splitlines())
+        if "c2012-17.3" in json_output:
+            # only the genuinely undeclared call may be reported,
+            # never the adapter call with a visible prototype:
+            # LssTuningModeAdapter call is at line 33, the genuinely
+            # implicit never_declared_function call is at line 40.
+            for violation in json_output["c2012-17.3"]:
+                assert violation["linenr"] == 40, \
+                    "17.3 false positive on declared adapter: %s" % violation
+    finally:
+        sys.argv.remove("--cli")
+        dump_remove(REGRESSION_17_3_SOURCE_FILE)
 
 
 def test_rules_cppcheck_severity(checker, capsys, test_files):
